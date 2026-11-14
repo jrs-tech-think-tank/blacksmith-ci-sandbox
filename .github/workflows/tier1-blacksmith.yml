@@ -1,0 +1,48 @@
+name: Tier 1 Blacksmith (4 vCPU)
+
+# Blacksmith half of the Tier 1 A/B. Identical to tier1-baseline.yml EXCEPT the runner
+# (blacksmith-4vcpu-ubuntu-2404) and Blacksmith's cache-backed checkout. Keeping both as
+# separate files lets one commit run both -> the only variable is the runner.
+# Manual trigger only so runs are deliberate, not auto-triggered on push.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "npm cache: cold (bypass) or warm (restore)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier1 blacksmith · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  fraud-model-benchmark:
+    name: Fraud model benchmark
+    # 4 vCPU to match the public-repo ubuntu-latest baseline (fair A/B).
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      # Blacksmith's cache-backed checkout (the wizard's swap). ~1s here, so negligible
+      # for Tier 1; matters more on large repos.
+      - uses: useblacksmith/checkout@v1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ inputs.cache_mode == 'warm' && 'npm' || '' }}
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - name: Fraud model benchmark (CPU)
+        run: npm run profile:cpu
+        env:
+          PROFILE_CPU_TASKS: 256
+          PROFILE_CPU_ITERATIONS: 9500000
+          PROFILE_CPU_WORKERS: 8
