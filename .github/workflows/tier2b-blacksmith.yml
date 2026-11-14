@@ -1,0 +1,42 @@
+name: Tier 2b Blacksmith (4 vCPU arm64, native) — arm64 Docker build
+
+# Blacksmith half of the arm64 A/B. Runs on a NATIVE arm64 runner, so the linux/arm64
+# build needs no QEMU — every instruction runs on real arm silicon at full speed.
+# Same image/Dockerfile as the baseline; the only variables are the runner arch (native
+# vs emulated) and Blacksmith's persistent layer cache. Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "cold (full native rebuild) or warm (reuse on-disk layer cache)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier2b blacksmith (native arm64) · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Docker build arm64 (native)
+    runs-on: blacksmith-4vcpu-ubuntu-2404-arm
+    steps:
+      - uses: useblacksmith/checkout@v1
+
+      - name: Set up Blacksmith Docker builder
+        uses: useblacksmith/setup-docker-builder@v2
+        with:
+          cache-key: tier2b-arm64
+
+      - name: Docker build (arm64, native)
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: tier2-app
+          file: tier2-app/Dockerfile
+          platforms: linux/arm64
+          push: false
+          load: false
+          tags: tier2-build-lab:arm64
+          no-cache: ${{ inputs.cache_mode == 'cold' }}

@@ -1,0 +1,46 @@
+name: Tier 2b Baseline (ubuntu-latest, QEMU) — arm64 Docker build
+
+# Baseline half of the arm64 A/B. The hosted runner is amd64, so building linux/arm64
+# requires QEMU emulation (docker/setup-qemu-action) — every instruction in the arm64
+# container runs through binary translation, which is slow (esp. the npm ci + bundle).
+# Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "cold (full emulated rebuild) or warm (reuse GHA layer cache)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier2b baseline (QEMU arm64) · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Docker build arm64 (emulated)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Registers binfmt handlers so buildx can emulate arm64 on this amd64 host.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Docker build (arm64, emulated)
+        uses: docker/build-push-action@v6
+        with:
+          context: tier2-app
+          file: tier2-app/Dockerfile
+          platforms: linux/arm64
+          push: false
+          load: false
+          tags: tier2-build-lab:arm64
+          no-cache: ${{ inputs.cache_mode == 'cold' }}
+          cache-from: type=gha,scope=tier2b-arm64
+          cache-to: type=gha,mode=max,scope=tier2b-arm64
