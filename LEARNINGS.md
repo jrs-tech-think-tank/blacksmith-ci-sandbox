@@ -3,6 +3,18 @@
 Newest first. Capture what worked, what didn't, and open questions. Keep it honest —
 negative results (a tier Blacksmith does *not* speed up) are findings too.
 
+## 2026-11-14 — Tier 1 baseline numbers (3 cold runs)
+
+- **Baseline (ubuntu-latest, 4 vCPU, n=3):** total median **569s**, CPU step median **558s**,
+  queue ~4s, `npm ci` ~1s. See `RESULTS.md` for the table.
+- **Big finding — variance:** CPU step ranged **443–563s** across identical runs (~27% swing).
+  Noisy neighbors on hosted runners; this is why single runs lie and we report spread.
+- cold ≈ warm confirmed for Tier 1 (npm ci ~1s) → no separate warm arm.
+- Decision: user wants a lean demo (1–3 runs/arm), not a stats paper. Public repo →
+  standard-runner minutes are free; the real cost is ~9.5 min wall-clock per run. Quieted
+  bench.js polling to cut token/output noise.
+- Next: user predicts the `runs-on` swap effect, then migrates on `migrate/tier1-easy`.
+
 ## 2026-11-14 — Scaffold + Tier 1 baseline
 
 ### What worked

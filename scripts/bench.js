@@ -77,19 +77,17 @@ async function dispatchAndDetect(repo, workflow, cacheMode, knownIds) {
 }
 
 async function waitForCompletion(repo, ids) {
+  // Poll quietly: only print on completion, not every tick (keeps output small).
   const pending = new Set(ids);
   while (pending.size > 0) {
-    await sleep(10000);
+    await sleep(15000);
     for (const id of Array.from(pending)) {
       const run = ghJson(['api', `repos/${repo}/actions/runs/${id}`]);
       if (run.status === 'completed') {
         pending.delete(id);
         const mark = run.conclusion === 'success' ? 'ok' : `!! ${run.conclusion}`;
-        process.stdout.write(`  run ${id}: ${mark}\n`);
+        process.stdout.write(`  run ${id}: ${mark} (${pending.size} still running)\n`);
       }
-    }
-    if (pending.size > 0) {
-      process.stdout.write(`  ...waiting on ${pending.size} run(s)\n`);
     }
   }
 }
