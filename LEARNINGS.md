@@ -3,6 +3,21 @@
 Newest first. Capture what worked, what didn't, and open questions. Keep it honest —
 negative results (a tier Blacksmith does *not* speed up) are findings too.
 
+## 2026-11-14 — Tier 2 amd64 result (nuanced — caching is workload-dependent)
+
+- 4 arms (n=1 each): totals baseline cold 47s / warm 23s; Blacksmith cold **29s** / warm 23s.
+- **Blacksmith has almost no cold-start penalty** (29s vs its warm 23s) because its builder
+  disk is persistent (base images + layers survive) — hosted cold is 2× its warm (empty
+  ephemeral builder each run). Docker build step: 22s→7s cold; 3s≈3s warm.
+- **Warm is a tie** for this *small* image — GHA cache handles small layers fine. The famous
+  "40×" needs cache-heavy builds (big base images / native deps). Our image is too light.
+- **Prediction check:** I predicted Blacksmith would crush the *warm* Docker build — WRONG.
+  The win was cold-start/consistency, not warm throughput. Good reminder: measure, don't assume.
+- Build gotchas: OSV policy blocked zod@3.25.76 and esbuild@0.24.2 → dropped zod, bumped esbuild.
+- Caveat: n=1, small absolute times → small deltas are indicative only.
+- Next: Tier 2b arm64 (native vs QEMU) = the clearer, workload-independent win; or beef up
+  the image to actually exercise the layer cache.
+
 ## 2026-11-14 — Tier 1 Blacksmith result (the payoff)
 
 - **Blacksmith 4 vCPU (n=2) vs ubuntu-latest 4 vCPU (n=3): CPU step 147.5s vs 558s → ~3.8×

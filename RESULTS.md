@@ -54,6 +54,45 @@ doesn't touch the CPU result.
 
 ---
 
-## Tier 2+ — not started
-Unit shards (waiting), Docker multi-arch (arm64 emulation — likely the biggest win),
-Integration + Postgres (neutralize the planted connection-limit bug first).
+## Tier 2 (amd64) — Docker build + npm cache
+
+Workload: `npm ci` (84 pkgs) → typecheck → esbuild bundle → multi-stage Docker build.
+Baseline uses GHA layer cache; Blacksmith uses its persistent on-disk layer cache.
+**n=1 per arm** — small absolute times, so treat small deltas as indicative, not proven.
+
+| Arm | Runner | Total | Docker build step | npm ci | Builder setup |
+|---|---|---|---|---|---|
+| Baseline — **cold** | ubuntu-latest | 47s | 22s | 2s | 8s |
+| Baseline — **warm** | ubuntu-latest | 23s | 3s | 2s | 6s |
+| Blacksmith — **cold** | blacksmith-4vcpu | **29s** | **7s** | 1s | 5s |
+| Blacksmith — **warm** | blacksmith-4vcpu | **23s** | 3s | 1s | 2s |
+
+Run IDs — base cold `43623914397`, base warm `43624018576`, bsmith cold `43623922237`,
+bsmith warm `43624026289`.
+
+### Observations
+- **Blacksmith barely has a cold-start penalty** (cold 29s vs its own warm 23s), while the
+  **hosted cold is 2× its own warm** (47s vs 23s). Reason: Blacksmith's builder disk is
+  *persistent* — base images and layers survive across runs, so even a `no-cache` build
+  skips the base-image pull and spins the builder up faster. The hosted runner starts
+  from an empty, ephemeral builder every time.
+- **Warm is essentially a tie (23s vs 23s).** For a *small* image, GitHub's GHA cache
+  restores layers just fine — so Blacksmith's cache advantage doesn't show up here.
+- `npm ci` (1–2s) and the bundle are too small to reveal the colocated-cache edge.
+
+### Takeaway (honest)
+**Blacksmith's win here is cold-start / consistency, not warm throughput.** The headline
+"up to 40× faster Docker builds" is real but applies to **cache-heavy builds** — large base
+images, big/native dependency layers — where GHA's network import/export latency dominates.
+Our image is tiny, so we see only the cold-start edge (~1.6× on total cold) and a warm tie.
+**Lesson: the caching win is workload-dependent — measure your actual image.** To make this
+pop we'd need a heavier image; the clearer, workload-independent win is Tier 2b (arm64
+native vs QEMU emulation). Caveat: n=1 — the small warm/cold deltas need more reps to trust.
+
+## Tier 2b (arm64) — not started
+Native `blacksmith-4vcpu-ubuntu-2404-arm` vs QEMU emulation on a hosted amd64 runner.
+Expected to be the dramatic, workload-independent win.
+
+## Tier 3+ — not started
+Unit shards (waiting → expect ~flat), Integration + Postgres (neutralize the planted
+connection-limit bug first).
