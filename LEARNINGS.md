@@ -3,6 +3,17 @@
 Newest first. Capture what worked, what didn't, and open questions. Keep it honest —
 negative results (a tier Blacksmith does *not* speed up) are findings too.
 
+## 2026-11-14 — Tier 2b arm64 result (native vs QEMU = clearest win)
+
+- Cold Docker build step: **48s emulated → 12s native = 4×**. Warm converges (6s vs 4s).
+- Emulation tax is only paid on cache-cold builds (the common real case); warm rebuilds
+  don't re-run emulated instructions so they tie.
+- Confounder: Blacksmith arm runner queue higher (10–11s vs 3–4s) → total only 1.7× cold
+  even though build step is 4×. Quote the build-step number, not the total.
+- Actions used: tier2b-baseline = docker/setup-qemu-action@v3 + buildx; tier2b-blacksmith =
+  native `-arm` runner + useblacksmith setup-docker-builder@v2/build-push-action@v2, no QEMU.
+- n=1 caveat, but 36s gap >> noise.
+
 ## 2026-11-14 — Tier 2 amd64 result (nuanced — caching is workload-dependent)
 
 - 4 arms (n=1 each): totals baseline cold 47s / warm 23s; Blacksmith cold **29s** / warm 23s.

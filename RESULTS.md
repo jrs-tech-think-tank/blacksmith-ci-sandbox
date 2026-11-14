@@ -89,9 +89,36 @@ Our image is tiny, so we see only the cold-start edge (~1.6× on total cold) and
 pop we'd need a heavier image; the clearer, workload-independent win is Tier 2b (arm64
 native vs QEMU emulation). Caveat: n=1 — the small warm/cold deltas need more reps to trust.
 
-## Tier 2b (arm64) — not started
-Native `blacksmith-4vcpu-ubuntu-2404-arm` vs QEMU emulation on a hosted amd64 runner.
-Expected to be the dramatic, workload-independent win.
+## Tier 2b (arm64) — QEMU emulation vs native arm
+
+Same image/Dockerfile as Tier 2, built for `linux/arm64`. Baseline emulates arm64 via QEMU
+on an amd64 hosted runner; Blacksmith runs on a **native** `blacksmith-4vcpu-ubuntu-2404-arm`.
+**n=1 per arm.**
+
+| Arm | Runner | Total | Docker build step | Queue |
+|---|---|---|---|---|
+| Baseline — **cold** | ubuntu-latest + QEMU | 78s | **48s** | 3s |
+| Blacksmith — **cold** | blacksmith-4vcpu-arm | **45s** | **12s** | 11s |
+| Baseline — **warm** | ubuntu-latest + QEMU | 29s | 6s | 4s |
+| Blacksmith — **warm** | blacksmith-4vcpu-arm | 28s | 4s | 10s |
+
+Run IDs — base cold `43625168026`, bsmith cold `43625176726`, base warm `43625670335`,
+bsmith warm `43625678872`.
+
+### Observations
+- **Cold build step: 48s (emulated) → 12s (native) = 4× faster.** That gap is the QEMU
+  binary-translation tax; native arm silicon removes it.
+- **Warm converges** (6s vs 4s; totals 29s ≈ 28s). A warm cache skips re-running the
+  emulated instructions, so the tax is only paid on cache-cold builds — which is the
+  common real-world case (new deps / Dockerfile edits / PRs).
+- **Confounder:** Blacksmith arm runner queue was higher (10–11s vs 3–4s hosted) — arm VM
+  spin-up. It dilutes the *total* (1.7× cold) even though the *build* is 4×.
+
+### Takeaway
+Native arm64 is **~4× faster than emulation on cold builds** — the clearest workload-
+independent Blacksmith win in the lab, and the common case for arm64 CI. Quote the 4× on
+the *build step*, not the total; note arm queue is a touch higher. n=1 caveat, but a
+36s build-step gap is well beyond noise.
 
 ## Tier 3+ — not started
 Unit shards (waiting → expect ~flat), Integration + Postgres (neutralize the planted
