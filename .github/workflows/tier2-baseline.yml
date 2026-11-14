@@ -1,0 +1,57 @@
+name: Tier 2 Baseline (ubuntu-latest) — Docker build + npm cache
+
+# Baseline half of the Tier 2 A/B: a realistic containerized build pipeline.
+# Exercises npm dependency caching (setup-node) AND Docker layer caching (GHA cache) —
+# the two caching mechanisms where Blacksmith's colocated storage beats GitHub's
+# network-backed cache. Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "cold (rebuild from scratch) or warm (reuse npm + docker cache)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier2 baseline · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: tier2-app
+
+jobs:
+  build:
+    name: Build & containerize (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ inputs.cache_mode == 'warm' && 'npm' || '' }}
+          cache-dependency-path: tier2-app/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Docker build (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: tier2-app
+          file: tier2-app/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: false
+          tags: tier2-build-lab:amd64
+          # cold -> full rebuild (ignore imported cache); warm -> import GHA layer cache.
+          # cache-to always exports so a later warm run has something to import.
+          no-cache: ${{ inputs.cache_mode == 'cold' }}
+          cache-from: type=gha,scope=tier2-amd64
+          cache-to: type=gha,mode=max,scope=tier2-amd64

@@ -1,0 +1,59 @@
+name: Tier 2 Blacksmith (4 vCPU) — Docker build + npm cache
+
+# Blacksmith half of the Tier 2 A/B. Identical pipeline to tier2-baseline.yml EXCEPT:
+#   - runs-on: blacksmith-4vcpu-ubuntu-2404 (match baseline vCPU)
+#   - useblacksmith/checkout + setup-node cache auto-backed by Blacksmith's colocated cache
+#   - useblacksmith/setup-docker-builder@v2 + build-push-action@v2 (persistent NVMe layer
+#     cache on disk — no cache-from/cache-to needed, nothing to import/export)
+# Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "cold (rebuild from scratch) or warm (reuse npm + docker cache)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier2 blacksmith · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: tier2-app
+
+jobs:
+  build:
+    name: Build & containerize (amd64)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: useblacksmith/checkout@v1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ inputs.cache_mode == 'warm' && 'npm' || '' }}
+          cache-dependency-path: tier2-app/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+
+      - name: Set up Blacksmith Docker builder
+        uses: useblacksmith/setup-docker-builder@v2
+        with:
+          cache-key: tier2-amd64
+
+      - name: Docker build (amd64)
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: tier2-app
+          file: tier2-app/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: false
+          tags: tier2-build-lab:amd64
+          # cold -> full rebuild; warm -> reuse the persistent on-disk layer cache.
+          no-cache: ${{ inputs.cache_mode == 'cold' }}
