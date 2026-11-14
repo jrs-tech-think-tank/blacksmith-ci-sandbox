@@ -1,0 +1,47 @@
+name: Tier 1 Baseline (ubuntu-latest)
+
+# Baseline half of the Tier 1 A/B. Runner = GitHub-hosted ubuntu-latest.
+# Its Blacksmith twin (tier1-blacksmith.yml) is identical except runs-on.
+# Manual trigger only: pushing this file must NOT auto-burn a benchmark run.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "npm cache: cold (bypass) or warm (restore)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier1 baseline · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  fraud-model-benchmark:
+    name: Fraud model benchmark
+    # Public-repo ubuntu-latest = 4 vCPU / 16 GB. Fair A/B twin = blacksmith-4vcpu-ubuntu-2404.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # cold -> empty string disables setup-node caching (npm ci hits the registry).
+          # warm -> 'npm' restores the colocated cache (run warm twice; use 2nd+ run).
+          cache: ${{ inputs.cache_mode == 'warm' && 'npm' || '' }}
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+
+      - name: Fraud model benchmark (CPU)
+        run: npm run profile:cpu
+        env:
+          PROFILE_CPU_TASKS: 256
+          PROFILE_CPU_ITERATIONS: 9500000
+          PROFILE_CPU_WORKERS: 8
