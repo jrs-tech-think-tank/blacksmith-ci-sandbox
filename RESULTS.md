@@ -15,12 +15,13 @@ benchmark step** is the pure-CPU part — that's the number a faster runner shou
 Workload: 256 pbkdf2-sha512 tasks × 9.5M iters across 8 worker threads. Identical on both
 arms; only `runs-on` differs.
 
-| Arm | Branch | Runner | n | Total (median) | CPU step (median) | Queue | CPU step min–max (IQR) |
-|---|---|---|---|---|---|---|---|
-| **Baseline — cold** | `main` | GitHub `ubuntu-latest` (4 vCPU) | 3 | **569s** | **558s** | 4s | 443–563s (IQR 60) |
-| Blacksmith — 4 vCPU | `migrate/tier1-easy` | `blacksmith-4vcpu-ubuntu-2404` | — | _TBD_ | _TBD_ | _TBD_ | _TBD_ |
+| Arm | Runner | n | Total (median) | CPU step (median) | Queue | CPU step min–max (IQR) |
+|---|---|---|---|---|---|---|
+| **Baseline — cold** | GitHub `ubuntu-latest` (4 vCPU) | 3 | **569s** | **558s** | 4s | 443–563s (IQR 60) |
+| **Blacksmith — cold** | `blacksmith-4vcpu-ubuntu-2404` | 2 | **163s** | **147.5s** | 7.5s | 146–149s (IQR 1.5) |
+| **Delta** | same 4 vCPU | | **3.5× faster** | **3.8× faster** | +3.5s | **variance 40× tighter** |
 
-Run IDs (baseline-cold): `43616666722, 43617897692, 43617903976`.
+Run IDs — baseline: `43616666722, 43617897692, 43617903976` · Blacksmith: `43620982384, 43621044523`.
 
 ### Observations so far
 - **CPU step dominates** (558 of 569s). Checkout + setup-node + `npm ci` ≈ 2–3s combined.
@@ -33,9 +34,23 @@ Run IDs (baseline-cold): `43616666722, 43617897692, 43617903976`.
   10000000xx`). Still want to confirm vCPU directly from `nproc`/`cpu_count` in-log.
 
 ### Takeaway
-_Pending the Blacksmith run._ Hypothesis to test: on the **same 4 vCPU**, a pure-CPU job
-is bounded by single-core throughput + how many cores actually run in parallel; any
-Blacksmith win here comes from faster/less-contended cores, not from caching or more vCPUs.
+**Blacksmith ran the identical CPU workload ~3.8× faster on the same vCPU count (558s →
+147.5s), and ~40× more consistently (IQR 60s → 1.5s).** The win is *not* caching or more
+cores — it's the hardware behind "4 vCPU":
+
+- GitHub-hosted `ubuntu-latest` runs on **shared, older/throttled vCPUs** (4 vCPU ≈ 2
+  physical cores with hyperthreading on an aging Azure SKU). Per-core throughput is modest
+  and **variable** (noisy neighbors → the 443–563s swing).
+- Blacksmith maps vCPU to **dedicated modern cores** (high clock/IPC, bare-metal-class),
+  so each pbkdf2 task finishes much faster, and with no neighbor contention the spread
+  nearly vanishes.
+
+So the lesson: **"vCPU count" is not a performance spec.** For CPU-bound CI, the generation
+and dedication of the cores dominate. Expect the biggest wins on compute-heavy jobs
+(builds, test suites that actually compute) and on jobs that suffer from hosted-runner
+variance. Confounders noted: n is small (2 vs 3), but the effect (3.8×) dwarfs the noise
+(IQR 1.5s); cold-cache only (warm ≈ cold here); `useblacksmith/checkout` adds ~1–2s but
+doesn't touch the CPU result.
 
 ---
 

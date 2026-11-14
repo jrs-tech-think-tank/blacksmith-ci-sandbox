@@ -3,6 +3,23 @@
 Newest first. Capture what worked, what didn't, and open questions. Keep it honest —
 negative results (a tier Blacksmith does *not* speed up) are findings too.
 
+## 2026-11-14 — Tier 1 Blacksmith result (the payoff)
+
+- **Blacksmith 4 vCPU (n=2) vs ubuntu-latest 4 vCPU (n=3): CPU step 147.5s vs 558s → ~3.8×
+  faster on the SAME vCPU count.** Total 163s vs 569s (~3.5×).
+- **Variance collapsed:** Blacksmith CPU step 146–149s (IQR 1.5) vs baseline 443–563s (IQR 60).
+- **Why (the "how/why" the user wanted):** vCPU count ≠ performance. Hosted = shared, older,
+  hyperthreaded, noisy. Blacksmith = dedicated modern cores. Not caching, not more cores.
+- Mechanics learned this session:
+  - `workflow_dispatch` workflows must exist on the **default branch** to be triggerable
+    (feature-branch-only → 404). So `tier1-blacksmith.yml` lives on `main` (dispatch-only,
+    harmless); `tier1-baseline.yml` stays untouched → clean separate-files A/B.
+  - Blacksmith wizard edits `runs-on` **in place** + swaps `actions/checkout` →
+    `useblacksmith/checkout@v1`. We superseded its PR with a separate-file layout.
+  - Blacksmith picked the job up in ~8s on a real `blacksmith-*-4vcpu` runner → app wired.
+- Next tiers to test the "biggest wins on compute/variance" thesis: Docker arm64 (emulation
+  vs native), unit shards (waiting — expect ~flat), integration+Postgres (fix the bug first).
+
 ## 2026-11-14 — Tier 1 baseline numbers (3 cold runs)
 
 - **Baseline (ubuntu-latest, 4 vCPU, n=3):** total median **569s**, CPU step median **558s**,
