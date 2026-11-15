@@ -3,6 +3,19 @@
 Newest first. Capture what worked, what didn't, and open questions. Keep it honest —
 negative results (a tier Blacksmith does *not* speed up) are findings too.
 
+## 2026-11-15 — Tier 3 unit shards (the negative result) + email scrub
+
+- Waiting workload (setTimeout sleeps): Blacksmith gave **no speedup**, marginally slower
+  (long-pole 75s vs 70s) purely from higher queue. Expected — faster cores can't speed up
+  waiting. Counterweight to Tier 1's 3.8×: same swap, opposite result, different workload.
+- **Bottleneck is sharding, not the runner:** shard 3/8 ~65s (3 long tests via idx%8) vs ~15s
+  others. Rebalancing → ~25s matrix, a bigger free win than any runner change.
+- Blacksmith app access survived the repo recreate (picked up on native runner immediately)
+  → user is on "all repositories".
+- **Repo scrub done:** deleted + recreated repo to remove Datadog email (force-push wasn't
+  enough — old SHAs stayed fetchable + Actions runs baked in the author email). New repo:
+  noreply-only, 0 old runs, old SHAs 422. Preference saved to memory.
+
 ## 2026-11-14 — Tier 2b arm64 result (native vs QEMU = clearest win)
 
 - Cold Docker build step: **48s emulated → 12s native = 4×**. Warm converges (6s vs 4s).

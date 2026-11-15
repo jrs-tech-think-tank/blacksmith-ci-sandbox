@@ -120,6 +120,32 @@ independent Blacksmith win in the lab, and the common case for arm64 CI. Quote t
 the *build step*, not the total; note arm queue is a touch higher. n=1 caveat, but a
 36s build-step gap is well beyond noise.
 
-## Tier 3+ — not started
-Unit shards (waiting → expect ~flat), Integration + Postgres (neutralize the planted
-connection-limit bug first).
+## Tier 3 — unit-test shards (waiting workload, 8-way matrix)
+
+Reuses `app/` `shard-tests.js` (setTimeout sleeps, not CPU). Same matrix on both arms;
+only `runs-on` differs. **n=1 per arm.**
+
+| | Baseline (ubuntu-latest) | Blacksmith (4 vCPU) |
+|---|---|---|
+| Matrix long-pole — shard 3/8 (total) | **70s** (exec 65s) | **75s** (exec 68s) |
+| Other 7 shards (total) | ~14–21s | ~18–19s |
+| Queue (per job) | 5–6s | 7–8s |
+
+Run IDs — baseline `43749167490`, blacksmith `43749176382`.
+
+### Observations
+- **No speedup — Blacksmith marginally slower** (75s vs 70s), all from higher queue. Expected:
+  the workload is fixed wall-clock sleeping, which faster cores cannot accelerate.
+- **The matrix is gated by lumpy sharding, not the runner.** Round-robin `idx%8` piles the 3
+  long tests onto shard 3 (~65s) while the other 7 finish in ~15s. Rebalancing shards would
+  cut the matrix to ~25s — a bigger, free win than any runner change.
+
+### Takeaway
+The counterweight to Tier 1: the *same* `runs-on` swap that gave 3.8× on CPU gives **nothing**
+on a waiting workload. Match the runner to the bottleneck — and for this job the bottleneck is
+shard balance, which measurement exposed and a faster runner would have masked.
+
+## Tier 3b — Integration + Postgres (not started)
+Service-container + the planted connection-limit bug (`cpus*3` workers × pool 4 vs
+`max_connections=20`). Better framed as a **debugging/observability showcase** (Blacksmith
+SSH into a live failing job) than a timing A/B; neutralize the bug first if used for timing.
