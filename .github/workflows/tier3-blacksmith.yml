@@ -1,0 +1,43 @@
+name: Tier 3 Blacksmith (4 vCPU) — unit test shards
+
+# Blacksmith half of Tier 3. Identical 8-way sharded matrix as tier3-baseline.yml, only the
+# runner differs. Because the workload is setTimeout sleeps (waiting, not CPU), we EXPECT a
+# near-flat result vs the hosted baseline — a useful negative result showing Blacksmith
+# accelerates compute, not wall-clock waiting. Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "npm cache: cold (bypass) or warm (restore)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier3 blacksmith · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  unit-tests:
+    name: Unit tests shard ${{ matrix.shard }}/8
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: useblacksmith/checkout@v1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ inputs.cache_mode == 'warm' && 'npm' || '' }}
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+      - run: npm run test:unit -- --shard=${{ matrix.shard }}/8

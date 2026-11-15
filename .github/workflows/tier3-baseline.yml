@@ -1,0 +1,44 @@
+name: Tier 3 Baseline (ubuntu-latest) — unit test shards
+
+# Baseline half of Tier 3: an 8-way sharded unit-test matrix. The "tests" are setTimeout
+# sleeps (a WAITING workload, not CPU), so a faster runner should NOT speed them up — the
+# expected result is ~flat vs Blacksmith. It also exposes lumpy sharding: round-robin idx%8
+# piles the three long tests onto shard 3/8 (~60s) while the rest finish in ~4s, so the
+# matrix wall-clock is gated by one shard. Manual trigger only.
+on:
+  workflow_dispatch:
+    inputs:
+      cache_mode:
+        description: "npm cache: cold (bypass) or warm (restore)"
+        type: choice
+        options: [cold, warm]
+        default: warm
+
+run-name: "Tier3 baseline · cache=${{ inputs.cache_mode }}"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  unit-tests:
+    name: Unit tests shard ${{ matrix.shard }}/8
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ inputs.cache_mode == 'warm' && 'npm' || '' }}
+          cache-dependency-path: app/package-lock.json
+
+      - run: npm ci
+      - run: npm run test:unit -- --shard=${{ matrix.shard }}/8
