@@ -25,16 +25,39 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Pick which tests run on this shard.
+//   roundrobin (default, legacy): idx % total — ignores duration, so the 3 long tests
+//     (adjacent multiples of 8 in the manifest) pile onto one shard -> lumpy, slow long-pole.
+//   balanced (LPT): sort by duration desc, greedily assign each test to the least-loaded
+//     shard -> long tests spread out, matrix long-pole drops to ~the single longest test.
+function selectShardTests(manifest, index, total, strategy) {
+  if (strategy !== 'balanced') {
+    return manifest.filter((_, idx) => idx % total === index - 1);
+  }
+  const loads = Array(total).fill(0);
+  const buckets = Array.from({ length: total }, () => []);
+  for (const test of [...manifest].sort((a, b) => b.durationMs - a.durationMs)) {
+    let min = 0;
+    for (let s = 1; s < total; s += 1) {
+      if (loads[s] < loads[min]) min = s;
+    }
+    buckets[min].push(test);
+    loads[min] += test.durationMs;
+  }
+  return buckets[index - 1];
+}
+
 async function main() {
   const { index, total } = parseShard(process.argv.slice(2));
   const manifestPath = path.join(__dirname, '..', 'fixtures', 'test-manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const scale = Number(process.env.TEST_DURATION_SCALE || 0.15);
+  const strategy = process.env.SHARD_STRATEGY === 'balanced' ? 'balanced' : 'roundrobin';
 
-  const tests = manifest.filter((_, idx) => idx % total === index - 1);
+  const tests = selectShardTests(manifest, index, total, strategy);
   const expectedDuration = tests.reduce((sum, test) => sum + test.durationMs, 0);
 
-  console.log(`running unit test shard ${index}/${total}`);
+  console.log(`running unit test shard ${index}/${total} (strategy=${strategy})`);
   console.log(`selected ${tests.length} tests with ${expectedDuration}ms historical duration`);
 
   for (const test of tests) {

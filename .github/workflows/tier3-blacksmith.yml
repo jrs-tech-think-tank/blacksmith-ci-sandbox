@@ -12,8 +12,13 @@ on:
         type: choice
         options: [cold, warm]
         default: warm
+      shard_strategy:
+        description: "sharding: roundrobin (lumpy, legacy) or balanced (LPT)"
+        type: choice
+        options: [roundrobin, balanced]
+        default: roundrobin
 
-run-name: "Tier3 blacksmith · cache=${{ inputs.cache_mode }}"
+run-name: "Tier3 blacksmith · cache=${{ inputs.cache_mode }} · shard=${{ inputs.shard_strategy }}"
 
 permissions:
   contents: read
@@ -41,3 +46,5 @@ jobs:
 
       - run: npm ci
       - run: npm run test:unit -- --shard=${{ matrix.shard }}/8
+        env:
+          SHARD_STRATEGY: ${{ inputs.shard_strategy }}
