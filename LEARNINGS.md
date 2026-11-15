@@ -12,6 +12,12 @@ negative results (a tier Blacksmith does *not* speed up) are findings too.
   others. Rebalancing → ~25s matrix, a bigger free win than any runner change.
 - Blacksmith app access survived the repo recreate (picked up on native runner immediately)
   → user is on "all repositories".
+- **Gotcha: repo recreate broke the Blacksmith DASHBOARD (not the runners).** New repo ID →
+  runners still provisioned (org app), but the dashboard/results backend didn't register the
+  new repo → job pages 404'd and it showed the OLD deleted repo's history. **Fix that worked:**
+  reconfigure the Blacksmith GitHub App's repo access (toggle to "select repos" + add the repo,
+  Save → fires installation_repositories webhook → re-registers). Historical runs don't backfill;
+  new runs appear. Confirmed via run 43754595649. Dashboard then showed shard 3/8 as the long pole.
 - **Repo scrub done:** deleted + recreated repo to remove Datadog email (force-push wasn't
   enough — old SHAs stayed fetchable + Actions runs baked in the author email). New repo:
   noreply-only, 0 old runs, old SHAs 422. Preference saved to memory.
