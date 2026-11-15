@@ -145,6 +145,22 @@ The counterweight to Tier 1: the *same* `runs-on` swap that gave 3.8× on CPU gi
 on a waiting workload. Match the runner to the bottleneck — and for this job the bottleneck is
 shard balance, which measurement exposed and a faster runner would have masked.
 
+### Optimization — balanced (LPT) sharding (same Blacksmith runner, sharding is the only variable)
+
+| Strategy | Matrix long-pole | Per-shard exec |
+|---|---|---|
+| round-robin (legacy, `idx%8`) | **74s** | shard 3 = 67s, rest ~10s |
+| balanced (LPT) | **38s** | 31 / 27 / 22 / 11 / 11 / 12 / 12 / 12s |
+
+Run IDs — round-robin `43754595649`, balanced `43755935629`. Toggle: `shard_strategy` input
+(or `SHARD_STRATEGY=balanced`); logic in `app/scripts/shard-tests.js`.
+
+**~1.9× faster (−36s), free, no infra change** — the 3 long tests now land on separate shards.
+That −36s is a *bigger absolute win than the Blacksmith runner swap gave on this tier* (~0). The
+lesson of the whole lab in one tier: measure → find the real bottleneck → fix it. The matrix now
+floors at the single longest test (~24s exec), which no sharding can split — the next lever would
+be splitting that test itself.
+
 ## Tier 3b — Integration + Postgres (not started)
 Service-container + the planted connection-limit bug (`cpus*3` workers × pool 4 vs
 `max_connections=20`). Better framed as a **debugging/observability showcase** (Blacksmith
