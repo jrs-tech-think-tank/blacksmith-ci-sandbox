@@ -1,0 +1,65 @@
+name: Tier 3b Blacksmith — Integration (Postgres) + SSH debugging
+
+# A DEBUGGING showcase, not a timing A/B. The integration suite has a planted failure:
+# INTEGRATION_WORKERS=auto -> cpus*3 workers, each with a pool of APP_DB_POOL_SIZE=4, so it
+# demands ~workers*4 connections against Postgres `max_connections=20` -> connection timeouts
+# and a deliberately vague error ("tenant bootstrap failed ... inspect runtime service logs").
+# On failure the runner is kept alive so you can SSH in (Blacksmith feature) and diagnose it.
+#
+# Prereq: an org admin must enable SSH access in app.blacksmith.sh -> Settings -> Features.
+# Only the GitHub user who triggered the run can SSH in (uses your GitHub SSH key).
+on:
+  workflow_dispatch:
+    inputs:
+      fix_applied:
+        description: "apply the connection-limit fix? no = reproduce the bug, yes = fixed"
+        type: choice
+        options: ["no", "yes"]
+        default: "no"
+
+run-name: "Tier3b integration · fix=${{ inputs.fix_applied }}"
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Integration tests (Postgres)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: useblacksmith/checkout@v1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Start Postgres (max_connections=20)
+        run: docker compose -f docker/docker-compose.yml up -d --wait
+
+      - name: Install deps
+        working-directory: app
+        run: npm ci
+
+      - name: Run integration suite
+        working-directory: app
+        run: npm run test:integration
+        env:
+          DATABASE_URL: postgresql://acme:acme@localhost:55432/acme_test
+          # no  -> auto (cpus*3 workers) -> ~48 conns vs max 20 -> FAILS
+          # yes -> 4 workers x pool 4 = 16 conns < 20 -> passes
+          INTEGRATION_WORKERS: ${{ inputs.fix_applied == 'yes' && '4' || 'auto' }}
+          APP_DB_POOL_SIZE: 4
+
+      - name: Keep runner alive for SSH debugging
+        if: failure()
+        run: |
+          echo "::warning::Job failed — VM held open 30 min for SSH debugging."
+          echo "Copy the 'ssh -p 64000 runner@...' command from the 'Set up runner' step"
+          echo "(or the Blacksmith dashboard) and connect. Cancel this run when done."
+          echo "Hints once in: psql \"$DATABASE_URL\" -c 'show max_connections;'"
+          echo "              psql \"$DATABASE_URL\" -c 'select count(*) from pg_stat_activity;'"
+          sleep 1800
+        env:
+          DATABASE_URL: postgresql://acme:acme@localhost:55432/acme_test
